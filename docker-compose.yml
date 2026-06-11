@@ -1,0 +1,55 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: wc_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wcuser
+      POSTGRES_PASSWORD: wcpass
+      POSTGRES_DB: worldcup
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wcuser -d worldcup"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    container_name: wc_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgres://wcuser:wcpass@db:5432/worldcup?sslmode=disable"
+      JWT_SECRET: "change_me_to_a_long_random_secret"
+      PORT: "8080"
+      ADMIN_USERNAME: "admin"
+      ADMIN_PASSWORD: "admin123"
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: "http://localhost:8080"
+    container_name: wc_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: "http://localhost:8080"
+    ports:
+      - "3000:3000"
+
+volumes:
+  db_data:
